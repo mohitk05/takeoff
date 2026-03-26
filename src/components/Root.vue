@@ -5,13 +5,13 @@ import videos from "../assets/videos.json";
 const currentVideoIndex = ref(0);
 const selectedTags = ref<string[]>([]);
 
-const allTags = computed(() => {
+const allTags = (() => {
   const tagSet = new Set<string>();
   videos.forEach((video) => {
     video.tags.forEach((tag) => tagSet.add(tag));
   });
   return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
-});
+})();
 
 const filteredVideos = computed(() => {
   if (selectedTags.value.length === 0) return videos;
@@ -21,7 +21,13 @@ const filteredVideos = computed(() => {
 });
 
 const videoIds = computed(() => filteredVideos.value.map((video) => video.id));
-const videoId = computed(() => videoIds.value[currentVideoIndex.value] ?? "");
+const hasVideos = computed(() => videoIds.value.length > 0);
+const currentVideoId = computed(() => {
+  if (!hasVideos.value) return "";
+  const maxIndex = videoIds.value.length - 1;
+  const safeIndex = Math.min(Math.max(0, currentVideoIndex.value), maxIndex);
+  return videoIds.value[safeIndex] ?? "";
+});
 const isVideoVisible = ref(false);
 
 const handleVideoEnd = () => {
@@ -33,6 +39,7 @@ const handleVideoEnd = () => {
 let player: any = null;
 let isYouTubeApiLoading = false;
 let isYouTubeApiLoaded = false;
+let isPlayerReady = false;
 
 const loadYouTubeApi = () => {
   if (isYouTubeApiLoaded || isYouTubeApiLoading) return;
@@ -53,8 +60,16 @@ const setupPlayer = () => {
   const iframe = document.querySelector("iframe");
   if (!iframe) return;
 
+  if (player?.destroy) {
+    player.destroy();
+  }
+  isPlayerReady = false;
+
   player = new (window as any).YT.Player(iframe, {
     events: {
+      onReady: () => {
+        isPlayerReady = true;
+      },
       onStateChange: (event: any) => {
         // YT.PlayerState.ENDED = 0
         if (event.data === 0) {
@@ -76,19 +91,17 @@ const selectRandomIndex = () => {
     currentVideoIndex.value = 0;
     return;
   }
-  currentVideoIndex.value = Math.floor(
-    Math.random() * videoIds.value.length,
-  );
+  currentVideoIndex.value = Math.floor(Math.random() * videoIds.value.length);
 };
 
 const handleStartVideo = () => {
-  isVideoVisible.value = true;
   selectRandomIndex();
+  isVideoVisible.value = true;
   loadYouTubeApi();
 };
 
 const handleKeyPress = (event: KeyboardEvent) => {
-  if (videoIds.value.length === 0) return;
+  if (!isVideoVisible.value || videoIds.value.length === 0) return;
   if (event.key === "ArrowUp") {
     // Previous video
     currentVideoIndex.value =
@@ -98,12 +111,29 @@ const handleKeyPress = (event: KeyboardEvent) => {
     // Next video
     currentVideoIndex.value =
       (currentVideoIndex.value + 1) % videoIds.value.length;
+  } else if (event.key === "ArrowRight") {
+    seekBy(10);
+  } else if (event.key === "ArrowLeft") {
+    seekBy(-10);
   }
 };
 
 onMounted(() => {
   window.addEventListener("keydown", handleKeyPress);
+  selectRandomIndex();
 });
+
+const seekBy = (deltaSeconds: number) => {
+  if (!isPlayerReady || !player?.getCurrentTime || !player?.seekTo) return;
+  const currentTime = player.getCurrentTime();
+  const duration = player.getDuration?.() ?? 0;
+  const unclamped = currentTime + deltaSeconds;
+  const nextTime =
+    duration > 0
+      ? Math.min(Math.max(0, unclamped), duration)
+      : Math.max(0, unclamped);
+  player.seekTo(nextTime, true);
+};
 
 watch(filteredVideos, (nextVideos) => {
   if (nextVideos.length === 0) {
@@ -126,10 +156,19 @@ onUnmounted(() => {
       <div
         class="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 rounded-full border border-white/15 bg-black/60 px-4 py-2 text-white backdrop-blur"
       >
-        <div class="text-xs uppercase tracking-[0.2em] text-white/70">
-          Filters
+        <div class="text-xs uppercase tracking-[0.2em] text-white font-bold">
+          Takeoff
         </div>
         <div class="flex items-center gap-3">
+          <a
+            v-if="currentVideoId"
+            class="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white/90 hover:border-white/40 hover:text-white"
+            :href="`https://www.youtube.com/watch?v=${currentVideoId}`"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open Video
+          </a>
           <details class="relative">
             <summary
               class="cursor-pointer select-none rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white/90 hover:border-white/40"
@@ -166,11 +205,11 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-    <template v-if="isVideoVisible && videoId">
+    <template v-if="isVideoVisible && hasVideos">
       <transition name="fade-slow">
         <div class="fixed inset-0 h-full w-full overflow-hidden">
           <iframe
-            :key="videoId"
+            :key="currentVideoId"
             class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
             style="
               width: 120vw;
@@ -178,7 +217,7 @@ onUnmounted(() => {
               min-height: 120vh;
               min-width: 213.33vh;
             "
-            :src="`https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0&showinfo=0&modestbranding=1&rel=0&disablekb=1&fs=0&iv_load_policy=3&enablejsapi=1`"
+            :src="`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&controls=0&showinfo=0&modestbranding=1&rel=0&disablekb=1&fs=0&iv_load_policy=3&enablejsapi=1`"
             title="YouTube video player"
             frameborder="0"
             allow="
@@ -197,7 +236,7 @@ onUnmounted(() => {
         </div>
       </transition>
     </template>
-    <template v-else-if="isVideoVisible && !videoId">
+    <template v-else-if="isVideoVisible && !hasVideos">
       <div
         class="relative z-1 flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center text-white"
       >
