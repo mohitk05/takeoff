@@ -1,0 +1,22 @@
+[
+  {
+    "id": "a9o-PE-DLNA",
+    "tags": ["pilot-pov", "takeoff", "landing", "cockpit-view"],
+    "duration": 1082
+  },
+  {
+    "id": "16XTAK-4Xbk",
+    "tags": ["pilot-pov", "takeoff", "cockpit-view"],
+    "duration": 300
+  },
+  {
+    "id": "y31o3NYIccA",
+    "tags": ["passenger-pov", "takeoff", "landing", "window-view"],
+    "duration": 8196
+  },
+  {
+    "id": "it4v-v-bOsY",
+    "tags": ["pilot-pov", "takeoff", "landing", "cockpit-view"],
+    "duration": 1634
+  }
+]
