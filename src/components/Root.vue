@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
-import { getVideos, getPlaybackState, sendHeartbeat, type Video } from "../api/client";
+import {
+  getVideos,
+  getPlaybackState,
+  sendHeartbeat,
+  type Video,
+} from "../api/client";
 
 const videos = ref<Video[]>([]);
 const currentVideoIndex = ref(0);
@@ -11,6 +16,11 @@ const viewers = ref(0);
 const isTVMode = ref(true); // TV mode = synchronized playback
 const startPosition = ref(0); // Position to start video from
 const showIOSPlayButton = ref(false); // Show tap-to-play overlay on iOS
+const showHint = ref(true); // Show keyboard/gesture hint
+
+const hideHint = () => {
+  showHint.value = false;
+};
 
 const allTags = computed(() => {
   const tagSet = new Set<string>();
@@ -51,7 +61,7 @@ const handleVideoEnd = async () => {
       startPosition.value = state.position;
       viewers.value = state.viewers;
     } catch (error) {
-      console.error('Failed to fetch next video state:', error);
+      console.error("Failed to fetch next video state:", error);
       // Fallback to next video
       currentVideoIndex.value = nextIndex;
       startPosition.value = 0;
@@ -115,11 +125,11 @@ const setupPlayer = () => {
               try {
                 event.target.unMute();
               } catch (e) {
-                console.log('Could not unmute:', e);
+                console.log("Could not unmute:", e);
               }
             }, 500);
           } catch (e) {
-            console.log('Could not start playback:', e);
+            console.log("Could not start playback:", e);
           }
         }
 
@@ -131,12 +141,12 @@ const setupPlayer = () => {
         // Disable captions
         try {
           const options = event.target.getOptions();
-          if (options.includes('cc')) {
-            event.target.unloadModule('cc');
+          if (options.includes("cc")) {
+            event.target.unloadModule("cc");
           }
-          event.target.setOption('captions', 'track', {});
+          event.target.setOption("captions", "track", {});
         } catch (e) {
-          console.log('Could not disable captions:', e);
+          console.log("Could not disable captions:", e);
         }
         // Fetch video details
         try {
@@ -144,7 +154,7 @@ const setupPlayer = () => {
           videoTitle.value = videoData.title || "";
           videoChannel.value = videoData.author || "";
         } catch (e) {
-          console.log('Could not fetch video details:', e);
+          console.log("Could not fetch video details:", e);
         }
       },
       onStateChange: (event: any) => {
@@ -178,7 +188,7 @@ const handleStartVideo = async () => {
     // TV mode: fetch synchronized playback state
     try {
       const state = await getPlaybackState();
-      const videoIndex = videos.value.findIndex(v => v.id === state.videoId);
+      const videoIndex = videos.value.findIndex((v) => v.id === state.videoId);
       if (videoIndex !== -1) {
         currentVideoIndex.value = videoIndex;
         startPosition.value = state.position;
@@ -188,7 +198,7 @@ const handleStartVideo = async () => {
         selectRandomIndex();
       }
     } catch (error) {
-      console.error('Failed to fetch playback state:', error);
+      console.error("Failed to fetch playback state:", error);
       // Fallback to random selection
       selectRandomIndex();
     }
@@ -204,13 +214,20 @@ const handleStartVideo = async () => {
   if (isTVMode.value) {
     startHeartbeat();
   }
+
+  // Auto-hide hint after 5 seconds
+  setTimeout(() => {
+    showHint.value = false;
+  }, 10000);
 };
 
 let heartbeatInterval: number | null = null;
 
 const isIOS = () => {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
 };
 
 let touchStartY = 0;
@@ -224,6 +241,12 @@ const handleTouchStart = (event: TouchEvent) => {
 
 const handleTouchEnd = (event: TouchEvent) => {
   if (!isVideoVisible.value || videoIds.value.length === 0) return;
+
+  // Hide hint on first interaction
+  if (showHint.value) {
+    hideHint();
+  }
+
   const touchEndY = event.changedTouches[0].clientY;
   const touchEndX = event.changedTouches[0].clientX;
   const deltaY = touchStartY - touchEndY;
@@ -236,30 +259,36 @@ const handleTouchEnd = (event: TouchEvent) => {
       const nextIndex = (currentVideoIndex.value + 1) % videoIds.value.length;
       if (isTVMode.value) {
         const nextVideoId = videoIds.value[nextIndex];
-        getPlaybackState(nextVideoId).then(state => {
-          currentVideoIndex.value = nextIndex;
-          startPosition.value = state.position;
-          viewers.value = state.viewers;
-        }).catch(() => {
-          currentVideoIndex.value = nextIndex;
-          startPosition.value = 0;
-        });
+        getPlaybackState(nextVideoId)
+          .then((state) => {
+            currentVideoIndex.value = nextIndex;
+            startPosition.value = state.position;
+            viewers.value = state.viewers;
+          })
+          .catch(() => {
+            currentVideoIndex.value = nextIndex;
+            startPosition.value = 0;
+          });
       } else {
         currentVideoIndex.value = nextIndex;
       }
     } else {
       // Swipe down - previous video
-      const prevIndex = (currentVideoIndex.value - 1 + videoIds.value.length) % videoIds.value.length;
+      const prevIndex =
+        (currentVideoIndex.value - 1 + videoIds.value.length) %
+        videoIds.value.length;
       if (isTVMode.value) {
         const prevVideoId = videoIds.value[prevIndex];
-        getPlaybackState(prevVideoId).then(state => {
-          currentVideoIndex.value = prevIndex;
-          startPosition.value = state.position;
-          viewers.value = state.viewers;
-        }).catch(() => {
-          currentVideoIndex.value = prevIndex;
-          startPosition.value = 0;
-        });
+        getPlaybackState(prevVideoId)
+          .then((state) => {
+            currentVideoIndex.value = prevIndex;
+            startPosition.value = state.position;
+            viewers.value = state.viewers;
+          })
+          .catch(() => {
+            currentVideoIndex.value = prevIndex;
+            startPosition.value = 0;
+          });
       } else {
         currentVideoIndex.value = prevIndex;
       }
@@ -279,26 +308,36 @@ const startHeartbeat = () => {
       const state = await getPlaybackState();
       viewers.value = state.viewers;
     } catch (error) {
-      console.error('Heartbeat failed:', error);
+      console.error("Heartbeat failed:", error);
     }
   }, 20000);
 };
 
 const handleKeyPress = (event: KeyboardEvent) => {
   if (!isVideoVisible.value || videoIds.value.length === 0) return;
+
+  // Hide hint on first interaction
+  if (showHint.value) {
+    hideHint();
+  }
+
   if (event.key === "ArrowUp") {
     // Previous video - fetch its current server state in TV mode
-    const prevIndex = (currentVideoIndex.value - 1 + videoIds.value.length) % videoIds.value.length;
+    const prevIndex =
+      (currentVideoIndex.value - 1 + videoIds.value.length) %
+      videoIds.value.length;
     if (isTVMode.value) {
       const prevVideoId = videoIds.value[prevIndex];
-      getPlaybackState(prevVideoId).then(state => {
-        currentVideoIndex.value = prevIndex;
-        startPosition.value = state.position;
-        viewers.value = state.viewers;
-      }).catch(() => {
-        currentVideoIndex.value = prevIndex;
-        startPosition.value = 0;
-      });
+      getPlaybackState(prevVideoId)
+        .then((state) => {
+          currentVideoIndex.value = prevIndex;
+          startPosition.value = state.position;
+          viewers.value = state.viewers;
+        })
+        .catch(() => {
+          currentVideoIndex.value = prevIndex;
+          startPosition.value = 0;
+        });
     } else {
       currentVideoIndex.value = prevIndex;
     }
@@ -307,14 +346,16 @@ const handleKeyPress = (event: KeyboardEvent) => {
     const nextIndex = (currentVideoIndex.value + 1) % videoIds.value.length;
     if (isTVMode.value) {
       const nextVideoId = videoIds.value[nextIndex];
-      getPlaybackState(nextVideoId).then(state => {
-        currentVideoIndex.value = nextIndex;
-        startPosition.value = state.position;
-        viewers.value = state.viewers;
-      }).catch(() => {
-        currentVideoIndex.value = nextIndex;
-        startPosition.value = 0;
-      });
+      getPlaybackState(nextVideoId)
+        .then((state) => {
+          currentVideoIndex.value = nextIndex;
+          startPosition.value = state.position;
+          viewers.value = state.viewers;
+        })
+        .catch(() => {
+          currentVideoIndex.value = nextIndex;
+          startPosition.value = 0;
+        });
     } else {
       currentVideoIndex.value = nextIndex;
     }
@@ -335,7 +376,7 @@ onMounted(async () => {
     videos.value = await getVideos();
     selectRandomIndex();
   } catch (error) {
-    console.error('Failed to load videos:', error);
+    console.error("Failed to load videos:", error);
   }
 });
 
@@ -359,12 +400,12 @@ const handleIOSPlay = () => {
       try {
         player.unMute();
       } catch (e) {
-        console.log('Could not unmute:', e);
+        console.log("Could not unmute:", e);
       }
     }, 100);
     showIOSPlayButton.value = false;
   } catch (e) {
-    console.log('Could not start playback:', e);
+    console.log("Could not start playback:", e);
   }
 };
 
@@ -389,13 +430,15 @@ watch(currentVideoId, () => {
 
   // In TV mode, fetch the current server state for the new video
   if (isTVMode.value && currentVideoId.value) {
-    getPlaybackState(currentVideoId.value).then(state => {
-      startPosition.value = state.position;
-      viewers.value = state.viewers;
-    }).catch(error => {
-      console.error('Failed to fetch video state:', error);
-      startPosition.value = 0;
-    });
+    getPlaybackState(currentVideoId.value)
+      .then((state) => {
+        startPosition.value = state.position;
+        viewers.value = state.viewers;
+      })
+      .catch((error) => {
+        console.error("Failed to fetch video state:", error);
+        startPosition.value = 0;
+      });
   }
 });
 
@@ -410,25 +453,37 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="relative h-screen w-screen overflow-hidden bg-black touch-none select-none">
+  <section
+    class="relative h-screen w-screen overflow-hidden bg-black touch-none select-none"
+  >
     <div class="absolute left-0 top-0 z-10 w-full p-2 sm:p-4">
       <div
         class="mx-auto flex w-full max-w-3xl flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 rounded-2xl sm:rounded-full border border-white/15 bg-black/60 p-3 sm:px-4 sm:py-2 text-white backdrop-blur"
       >
         <!-- Top row on mobile: Title and video info -->
         <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-          <div class="text-xs uppercase tracking-[0.2em] text-white font-bold whitespace-nowrap">
+          <div
+            class="text-xs uppercase tracking-[0.2em] text-white font-bold whitespace-nowrap"
+          >
             Takeoff
           </div>
           <transition name="fade">
-            <div v-if="isVideoVisible && (videoTitle || videoChannel)" class="flex items-center gap-2 min-w-0 flex-1">
+            <div
+              v-if="isVideoVisible && (videoTitle || videoChannel)"
+              class="flex items-center gap-2 min-w-0 flex-1"
+            >
               <div class="w-px h-4 bg-white/20 hidden sm:block"></div>
               <div class="marquee-container">
                 <div class="marquee-content">
-                  <span class="text-xs text-white/90 font-medium whitespace-nowrap">
+                  <span
+                    class="text-xs text-white/90 font-medium whitespace-nowrap"
+                  >
                     {{ videoTitle }}
                   </span>
-                  <span v-if="videoChannel" class="text-xs text-white/60 whitespace-nowrap ml-2">
+                  <span
+                    v-if="videoChannel"
+                    class="text-xs text-white/60 whitespace-nowrap ml-2"
+                  >
                     • {{ videoChannel }}
                   </span>
                 </div>
@@ -438,9 +493,16 @@ onUnmounted(() => {
         </div>
 
         <!-- Bottom row on mobile: Actions -->
-        <div class="flex items-center gap-2 sm:gap-3 flex-shrink-0 justify-between sm:justify-end">
-          <div v-if="isTVMode && viewers > 0" class="flex items-center gap-1 sm:gap-2 rounded-full border border-white/20 px-2 sm:px-4 py-1.5 sm:py-2">
-            <span class="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-white/70">
+        <div
+          class="flex items-center gap-2 sm:gap-3 flex-shrink-0 justify-between sm:justify-end"
+        >
+          <div
+            v-if="isTVMode && viewers > 0"
+            class="flex items-center gap-1 sm:gap-2 rounded-full border border-white/20 px-2 sm:px-4 py-1.5 sm:py-2"
+          >
+            <span
+              class="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-white/70"
+            >
               👥 {{ viewers }}
             </span>
           </div>
@@ -458,7 +520,9 @@ onUnmounted(() => {
             <summary
               class="cursor-pointer select-none rounded-full border border-white/20 px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-white/90 hover:border-white/40 list-none"
             >
-              <span class="hidden sm:inline">Tags ({{ selectedTags.length }})</span>
+              <span class="hidden sm:inline"
+                >Tags ({{ selectedTags.length }})</span
+              >
               <span class="sm:hidden">🏷️ {{ selectedTags.length }}</span>
             </summary>
             <div
@@ -476,7 +540,9 @@ onUnmounted(() => {
                     :value="tag"
                     class="h-4 w-4 accent-white"
                   />
-                  <span class="text-white/85 text-xs sm:text-sm">{{ tag }}</span>
+                  <span class="text-white/85 text-xs sm:text-sm">{{
+                    tag
+                  }}</span>
                 </label>
               </div>
               <button
@@ -532,12 +598,45 @@ onUnmounted(() => {
                 class="flex items-center justify-center w-20 h-20 rounded-full bg-white/90 hover:bg-white transition-all shadow-2xl"
                 type="button"
               >
-                <svg class="w-10 h-10 text-black ml-1" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z"/>
+                <svg
+                  class="w-10 h-10 text-black ml-1"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M8 5v14l11-7z" />
                 </svg>
               </button>
             </div>
           </transition>
+        </div>
+      </transition>
+
+      <!-- Keyboard/Gesture Hint -->
+      <transition name="fade">
+        <div
+          v-if="showHint"
+          class="fixed bottom-8 left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+        >
+          <div
+            class="bg-black/80 backdrop-blur border border-white/20 rounded-2xl px-4 py-3 sm:px-6 sm:py-4 text-white text-center shadow-2xl"
+          >
+            <div class="hidden sm:flex items-center gap-3">
+              <div class="flex gap-1.5">
+                <kbd
+                  class="px-2.5 py-1.5 bg-white/10 border border-white/20 rounded text-s font-mono"
+                  >↑</kbd
+                >
+                <kbd
+                  class="px-2.5 py-1.5 bg-white/10 border border-white/20 rounded text-s font-mono"
+                  >↓</kbd
+                >
+              </div>
+              <span class="text-sm text-white/80">to switch videos</span>
+            </div>
+            <div class="sm:hidden text-sm text-white/80">
+              Swipe up/down to switch videos
+            </div>
+          </div>
         </div>
       </transition>
     </template>
@@ -603,15 +702,39 @@ onUnmounted(() => {
   min-width: 0;
   flex: 1;
   max-width: 200px;
-  -webkit-mask-image: linear-gradient(to right, transparent, black 15px, black calc(100% - 15px), transparent);
-  mask-image: linear-gradient(to right, transparent, black 15px, black calc(100% - 15px), transparent);
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 15px,
+    black calc(100% - 15px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 15px,
+    black calc(100% - 15px),
+    transparent
+  );
 }
 
 @media (min-width: 640px) {
   .marquee-container {
     max-width: 400px;
-    -webkit-mask-image: linear-gradient(to right, transparent, black 30px, black calc(100% - 30px), transparent);
-    mask-image: linear-gradient(to right, transparent, black 30px, black calc(100% - 30px), transparent);
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent,
+      black 30px,
+      black calc(100% - 30px),
+      transparent
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black 30px,
+      black calc(100% - 30px),
+      transparent
+    );
   }
 }
 
