@@ -103,14 +103,20 @@ const setupPlayer = () => {
       onReady: (event: any) => {
         isPlayerReady = true;
 
-        // Unmute after a short delay to ensure playback has started
-        setTimeout(() => {
-          try {
-            event.target.unMute();
-          } catch (e) {
-            console.log('Could not unmute:', e);
-          }
-        }, 100);
+        // Explicitly call playVideo() for Safari
+        try {
+          event.target.playVideo();
+          // Unmute after playback starts
+          setTimeout(() => {
+            try {
+              event.target.unMute();
+            } catch (e) {
+              console.log('Could not unmute:', e);
+            }
+          }, 500);
+        } catch (e) {
+          console.log('Could not start playback:', e);
+        }
 
         // If in TV mode and we have a start position, seek to it
         if (isTVMode.value && startPosition.value > 0) {
