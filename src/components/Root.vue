@@ -103,19 +103,36 @@ const setupPlayer = () => {
       onReady: (event: any) => {
         isPlayerReady = true;
 
-        // Explicitly call playVideo() for Safari
-        try {
-          event.target.playVideo();
-          // Unmute after playback starts
-          setTimeout(() => {
-            try {
-              event.target.unMute();
-            } catch (e) {
-              console.log('Could not unmute:', e);
-            }
-          }, 500);
-        } catch (e) {
-          console.log('Could not start playback:', e);
+        // For iOS, we need to be more aggressive with playback initiation
+        if (isIOS()) {
+          try {
+            // iOS requires explicit play call
+            event.target.playVideo();
+            // Try to unmute immediately on iOS since user just clicked
+            setTimeout(() => {
+              try {
+                event.target.unMute();
+              } catch (e) {
+                console.log('Could not unmute on iOS:', e);
+              }
+            }, 100);
+          } catch (e) {
+            console.log('Could not start playback on iOS:', e);
+          }
+        } else {
+          // Desktop Safari
+          try {
+            event.target.playVideo();
+            setTimeout(() => {
+              try {
+                event.target.unMute();
+              } catch (e) {
+                console.log('Could not unmute:', e);
+              }
+            }, 500);
+          } catch (e) {
+            console.log('Could not start playback:', e);
+          }
         }
 
         // If in TV mode and we have a start position, seek to it
@@ -202,6 +219,11 @@ const handleStartVideo = async () => {
 };
 
 let heartbeatInterval: number | null = null;
+
+const isIOS = () => {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+};
 
 let touchStartY = 0;
 let touchStartX = 0;
@@ -482,6 +504,7 @@ onUnmounted(() => {
               gyroscope;
               picture-in-picture;
               web-share;
+              fullscreen;
             "
             referrerpolicy="strict-origin-when-cross-origin"
             allowfullscreen
