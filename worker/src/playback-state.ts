@@ -1,9 +1,12 @@
 import { videos } from './videos';
 
 interface PlaybackStateData {
-  currentVideoIndex: number;
-  currentPosition: number; // seconds into the current video
-  lastUpdated: number; // timestamp
+  // Each video has its own virtual playback starting from when it was first accessed
+  videoStates: {
+    [videoId: string]: {
+      startTime: number; // When this video's playback started (timestamp)
+    };
+  };
   viewers: number;
 }
 
@@ -31,7 +34,8 @@ export class PlaybackState implements DurableObject {
 
     try {
       if (url.pathname === '/state' && request.method === 'GET') {
-        return this.getState(corsHeaders);
+        const videoId = url.searchParams.get('videoId');
+        return this.getState(corsHeaders, videoId);
       }
 
       if (url.pathname === '/heartbeat' && request.method === 'POST') {
@@ -47,45 +51,60 @@ export class PlaybackState implements DurableObject {
     }
   }
 
-  private async getState(corsHeaders: Record<string, string>): Promise<Response> {
+  private async getState(corsHeaders: Record<string, string>, videoId: string | null): Promise<Response> {
     // Load state from storage if not in memory
     if (!this.playbackData) {
       const stored = await this.state.storage.get<PlaybackStateData>('playback');
       if (stored) {
         this.playbackData = stored;
       } else {
-        // Initialize with first video
+        // Initialize empty state
         this.playbackData = {
-          currentVideoIndex: 0,
-          currentPosition: 0,
-          lastUpdated: Date.now(),
+          videoStates: {},
           viewers: 0,
         };
         await this.state.storage.put('playback', this.playbackData);
       }
     }
 
-    // Calculate current position based on elapsed time
-    const now = Date.now();
-    const elapsedSeconds = (now - this.playbackData.lastUpdated) / 1000;
-    let position = this.playbackData.currentPosition + elapsedSeconds;
-    let videoIndex = this.playbackData.currentVideoIndex;
-
-    // Advance to next video if current one has ended
-    while (position >= videos[videoIndex].duration) {
-      position -= videos[videoIndex].duration;
-      videoIndex = (videoIndex + 1) % videos.length;
+    // If no videoId specified, return first video
+    if (!videoId) {
+      videoId = videos[0].id;
     }
 
-    const currentVideo = videos[videoIndex];
+    // Find the video
+    const video = videos.find(v => v.id === videoId);
+    if (!video) {
+      return new Response(JSON.stringify({ error: 'Video not found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const now = Date.now();
+
+    // If this video hasn't been accessed before, initialize it
+    if (!this.playbackData.videoStates[videoId]) {
+      this.playbackData.videoStates[videoId] = {
+        startTime: now,
+      };
+      await this.state.storage.put('playback', this.playbackData);
+    }
+
+    // Calculate position: loops continuously based on elapsed time
+    const startTime = this.playbackData.videoStates[videoId].startTime;
+    const elapsedSeconds = (now - startTime) / 1000;
+    const position = Math.floor(elapsedSeconds % video.duration);
+
+    const videoIndex = videos.findIndex(v => v.id === videoId);
 
     return new Response(
       JSON.stringify({
-        videoId: currentVideo.id,
+        videoId: video.id,
         videoIndex,
-        position: Math.floor(position),
-        duration: currentVideo.duration,
-        tags: currentVideo.tags,
+        position,
+        duration: video.duration,
+        tags: video.tags,
         viewers: this.playbackData.viewers,
         serverTime: now,
       }),
@@ -105,9 +124,7 @@ export class PlaybackState implements DurableObject {
         this.playbackData = stored;
       } else {
         this.playbackData = {
-          currentVideoIndex: 0,
-          currentPosition: 0,
-          lastUpdated: Date.now(),
+          videoStates: {},
           viewers: 0,
         };
       }

@@ -36,10 +36,31 @@ const currentVideoId = computed(() => {
 });
 const isVideoVisible = ref(false);
 
-const handleVideoEnd = () => {
+const handleVideoEnd = async () => {
   if (videoIds.value.length === 0) return;
-  currentVideoIndex.value =
-    (currentVideoIndex.value + 1) % videoIds.value.length;
+
+  if (isTVMode.value) {
+    // In TV mode, advance to next video and fetch its current server state
+    const nextIndex = (currentVideoIndex.value + 1) % videoIds.value.length;
+    const nextVideoId = videoIds.value[nextIndex];
+
+    try {
+      const state = await getPlaybackState(nextVideoId);
+      currentVideoIndex.value = nextIndex;
+      startPosition.value = state.position;
+      viewers.value = state.viewers;
+    } catch (error) {
+      console.error('Failed to fetch next video state:', error);
+      // Fallback to next video
+      currentVideoIndex.value = nextIndex;
+      startPosition.value = 0;
+    }
+  } else {
+    // Random mode: just advance to next
+    currentVideoIndex.value =
+      (currentVideoIndex.value + 1) % videoIds.value.length;
+    startPosition.value = 0;
+  }
 };
 
 let player: any = null;
@@ -187,14 +208,37 @@ const startHeartbeat = () => {
 const handleKeyPress = (event: KeyboardEvent) => {
   if (!isVideoVisible.value || videoIds.value.length === 0) return;
   if (event.key === "ArrowUp") {
-    // Previous video
-    currentVideoIndex.value =
-      (currentVideoIndex.value - 1 + videoIds.value.length) %
-      videoIds.value.length;
+    // Previous video - fetch its current server state in TV mode
+    const prevIndex = (currentVideoIndex.value - 1 + videoIds.value.length) % videoIds.value.length;
+    if (isTVMode.value) {
+      const prevVideoId = videoIds.value[prevIndex];
+      getPlaybackState(prevVideoId).then(state => {
+        currentVideoIndex.value = prevIndex;
+        startPosition.value = state.position;
+        viewers.value = state.viewers;
+      }).catch(() => {
+        currentVideoIndex.value = prevIndex;
+        startPosition.value = 0;
+      });
+    } else {
+      currentVideoIndex.value = prevIndex;
+    }
   } else if (event.key === "ArrowDown") {
-    // Next video
-    currentVideoIndex.value =
-      (currentVideoIndex.value + 1) % videoIds.value.length;
+    // Next video - fetch its current server state in TV mode
+    const nextIndex = (currentVideoIndex.value + 1) % videoIds.value.length;
+    if (isTVMode.value) {
+      const nextVideoId = videoIds.value[nextIndex];
+      getPlaybackState(nextVideoId).then(state => {
+        currentVideoIndex.value = nextIndex;
+        startPosition.value = state.position;
+        viewers.value = state.viewers;
+      }).catch(() => {
+        currentVideoIndex.value = nextIndex;
+        startPosition.value = 0;
+      });
+    } else {
+      currentVideoIndex.value = nextIndex;
+    }
   } else if (event.key === "ArrowRight") {
     seekBy(10);
   } else if (event.key === "ArrowLeft") {
@@ -239,6 +283,17 @@ watch(filteredVideos, (nextVideos) => {
 watch(currentVideoId, () => {
   // Reset iframe loaded state when video changes (iframe recreates due to :key)
   isIframeLoaded = false;
+
+  // In TV mode, fetch the current server state for the new video
+  if (isTVMode.value && currentVideoId.value) {
+    getPlaybackState(currentVideoId.value).then(state => {
+      startPosition.value = state.position;
+      viewers.value = state.viewers;
+    }).catch(error => {
+      console.error('Failed to fetch video state:', error);
+      startPosition.value = 0;
+    });
+  }
 });
 
 onUnmounted(() => {

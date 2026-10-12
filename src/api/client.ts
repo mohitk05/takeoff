@@ -24,8 +24,11 @@ export async function getVideos(): Promise<Video[]> {
   return response.json();
 }
 
-export async function getPlaybackState(): Promise<PlaybackState> {
-  const response = await fetch(`${API_BASE_URL}/api/playback`);
+export async function getPlaybackState(videoId?: string): Promise<PlaybackState> {
+  const url = videoId
+    ? `${API_BASE_URL}/api/playback?videoId=${encodeURIComponent(videoId)}`
+    : `${API_BASE_URL}/api/playback`;
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error('Failed to fetch playback state');
   }

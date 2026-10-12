@@ -37,7 +37,13 @@ export default {
       if (url.pathname === '/api/playback') {
         const id = env.PLAYBACK_STATE.idFromName('global');
         const stub = env.PLAYBACK_STATE.get(id);
-        return stub.fetch(new Request(new URL('/state', request.url)));
+        const stateUrl = new URL('/state', request.url);
+        // Pass through videoId query parameter if present
+        const videoId = url.searchParams.get('videoId');
+        if (videoId) {
+          stateUrl.searchParams.set('videoId', videoId);
+        }
+        return stub.fetch(new Request(stateUrl));
       }
 
       // POST /api/heartbeat - Send viewer heartbeat
