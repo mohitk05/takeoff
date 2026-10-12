@@ -103,6 +103,15 @@ const setupPlayer = () => {
       onReady: (event: any) => {
         isPlayerReady = true;
 
+        // Unmute after a short delay to ensure playback has started
+        setTimeout(() => {
+          try {
+            event.target.unMute();
+          } catch (e) {
+            console.log('Could not unmute:', e);
+          }
+        }, 100);
+
         // If in TV mode and we have a start position, seek to it
         if (isTVMode.value && startPosition.value > 0) {
           event.target.seekTo(startPosition.value, true);
@@ -456,7 +465,7 @@ onUnmounted(() => {
               min-height: 120vh;
               min-width: 213.33vh;
             "
-            :src="`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&controls=0&showinfo=0&modestbranding=1&rel=0&disablekb=1&fs=0&iv_load_policy=3&enablejsapi=1&cc_load_policy=0`"
+            :src="`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&mute=1&controls=0&showinfo=0&modestbranding=1&rel=0&disablekb=1&fs=0&iv_load_policy=3&enablejsapi=1&cc_load_policy=0&playsinline=1`"
             title="YouTube video player"
             frameborder="0"
             allow="
@@ -470,6 +479,7 @@ onUnmounted(() => {
             "
             referrerpolicy="strict-origin-when-cross-origin"
             allowfullscreen
+            playsinline
             @load="setupVideoEndListener"
           ></iframe>
         </div>
