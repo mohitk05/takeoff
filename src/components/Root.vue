@@ -188,6 +188,60 @@ const handleStartVideo = async () => {
 
 let heartbeatInterval: number | null = null;
 
+let touchStartY = 0;
+let touchStartX = 0;
+
+const handleTouchStart = (event: TouchEvent) => {
+  if (!isVideoVisible.value || videoIds.value.length === 0) return;
+  touchStartY = event.touches[0].clientY;
+  touchStartX = event.touches[0].clientX;
+};
+
+const handleTouchEnd = (event: TouchEvent) => {
+  if (!isVideoVisible.value || videoIds.value.length === 0) return;
+  const touchEndY = event.changedTouches[0].clientY;
+  const touchEndX = event.changedTouches[0].clientX;
+  const deltaY = touchStartY - touchEndY;
+  const deltaX = touchStartX - touchEndX;
+
+  // Vertical swipe threshold: 50px
+  if (Math.abs(deltaY) > 50 && Math.abs(deltaY) > Math.abs(deltaX)) {
+    if (deltaY > 0) {
+      // Swipe up - next video
+      const nextIndex = (currentVideoIndex.value + 1) % videoIds.value.length;
+      if (isTVMode.value) {
+        const nextVideoId = videoIds.value[nextIndex];
+        getPlaybackState(nextVideoId).then(state => {
+          currentVideoIndex.value = nextIndex;
+          startPosition.value = state.position;
+          viewers.value = state.viewers;
+        }).catch(() => {
+          currentVideoIndex.value = nextIndex;
+          startPosition.value = 0;
+        });
+      } else {
+        currentVideoIndex.value = nextIndex;
+      }
+    } else {
+      // Swipe down - previous video
+      const prevIndex = (currentVideoIndex.value - 1 + videoIds.value.length) % videoIds.value.length;
+      if (isTVMode.value) {
+        const prevVideoId = videoIds.value[prevIndex];
+        getPlaybackState(prevVideoId).then(state => {
+          currentVideoIndex.value = prevIndex;
+          startPosition.value = state.position;
+          viewers.value = state.viewers;
+        }).catch(() => {
+          currentVideoIndex.value = prevIndex;
+          startPosition.value = 0;
+        });
+      } else {
+        currentVideoIndex.value = prevIndex;
+      }
+    }
+  }
+};
+
 const startHeartbeat = () => {
   if (heartbeatInterval) {
     clearInterval(heartbeatInterval);
@@ -248,6 +302,8 @@ const handleKeyPress = (event: KeyboardEvent) => {
 
 onMounted(async () => {
   window.addEventListener("keydown", handleKeyPress);
+  window.addEventListener("touchstart", handleTouchStart);
+  window.addEventListener("touchend", handleTouchEnd);
 
   // Load videos from API
   try {
@@ -298,6 +354,8 @@ watch(currentVideoId, () => {
 
 onUnmounted(() => {
   window.removeEventListener("keydown", handleKeyPress);
+  window.removeEventListener("touchstart", handleTouchStart);
+  window.removeEventListener("touchend", handleTouchEnd);
   if (heartbeatInterval) {
     clearInterval(heartbeatInterval);
   }
@@ -305,18 +363,19 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="relative h-screen w-screen overflow-hidden bg-black">
-    <div class="absolute left-0 top-0 z-10 w-full p-4">
+  <section class="relative h-screen w-screen overflow-hidden bg-black touch-none select-none">
+    <div class="absolute left-0 top-0 z-10 w-full p-2 sm:p-4">
       <div
-        class="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 rounded-full border border-white/15 bg-black/60 px-4 py-2 text-white backdrop-blur"
+        class="mx-auto flex w-full max-w-3xl flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 rounded-2xl sm:rounded-full border border-white/15 bg-black/60 p-3 sm:px-4 sm:py-2 text-white backdrop-blur"
       >
-        <div class="flex items-center gap-3 min-w-0 flex-1">
+        <!-- Top row on mobile: Title and video info -->
+        <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           <div class="text-xs uppercase tracking-[0.2em] text-white font-bold whitespace-nowrap">
             Takeoff
           </div>
           <transition name="fade">
             <div v-if="isVideoVisible && (videoTitle || videoChannel)" class="flex items-center gap-2 min-w-0 flex-1">
-              <div class="w-px h-4 bg-white/20"></div>
+              <div class="w-px h-4 bg-white/20 hidden sm:block"></div>
               <div class="marquee-container">
                 <div class="marquee-content">
                   <span class="text-xs text-white/90 font-medium whitespace-nowrap">
@@ -330,29 +389,33 @@ onUnmounted(() => {
             </div>
           </transition>
         </div>
-        <div class="flex items-center gap-3 flex-shrink-0">
-          <div v-if="isTVMode && viewers > 0" class="flex items-center gap-2 rounded-full border border-white/20 px-4 py-2">
-            <span class="text-xs font-semibold uppercase tracking-widest text-white/70">
-              👥 {{ viewers }} watching
+
+        <!-- Bottom row on mobile: Actions -->
+        <div class="flex items-center gap-2 sm:gap-3 flex-shrink-0 justify-between sm:justify-end">
+          <div v-if="isTVMode && viewers > 0" class="flex items-center gap-1 sm:gap-2 rounded-full border border-white/20 px-2 sm:px-4 py-1.5 sm:py-2">
+            <span class="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-white/70">
+              👥 {{ viewers }}
             </span>
           </div>
           <a
             v-if="currentVideoId"
-            class="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white/90 hover:border-white/40 hover:text-white"
+            class="rounded-full border border-white/20 px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-white/90 hover:border-white/40 hover:text-white whitespace-nowrap"
             :href="`https://www.youtube.com/watch?v=${currentVideoId}`"
             target="_blank"
             rel="noreferrer"
           >
-            Open Video
+            <span class="hidden sm:inline">Open Video</span>
+            <span class="sm:hidden">Open</span>
           </a>
           <details class="relative">
             <summary
-              class="cursor-pointer select-none rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white/90 hover:border-white/40"
+              class="cursor-pointer select-none rounded-full border border-white/20 px-3 sm:px-4 py-1.5 sm:py-2 text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-white/90 hover:border-white/40 list-none"
             >
-              Tags ({{ selectedTags.length }})
+              <span class="hidden sm:inline">Tags ({{ selectedTags.length }})</span>
+              <span class="sm:hidden">🏷️ {{ selectedTags.length }}</span>
             </summary>
             <div
-              class="absolute right-0 mt-2 w-64 rounded-2xl border border-white/10 bg-black/90 p-3 text-sm text-white shadow-xl"
+              class="absolute right-0 mt-2 w-56 sm:w-64 rounded-2xl border border-white/10 bg-black/90 p-3 text-sm text-white shadow-xl z-50"
             >
               <div class="max-h-56 overflow-auto pr-1">
                 <label
@@ -366,7 +429,7 @@ onUnmounted(() => {
                     :value="tag"
                     class="h-4 w-4 accent-white"
                   />
-                  <span class="text-white/85">{{ tag }}</span>
+                  <span class="text-white/85 text-xs sm:text-sm">{{ tag }}</span>
                 </label>
               </div>
               <button
@@ -473,9 +536,17 @@ onUnmounted(() => {
   position: relative;
   min-width: 0;
   flex: 1;
-  max-width: 400px;
-  -webkit-mask-image: linear-gradient(to right, transparent, black 30px, black calc(100% - 30px), transparent);
-  mask-image: linear-gradient(to right, transparent, black 30px, black calc(100% - 30px), transparent);
+  max-width: 200px;
+  -webkit-mask-image: linear-gradient(to right, transparent, black 15px, black calc(100% - 15px), transparent);
+  mask-image: linear-gradient(to right, transparent, black 15px, black calc(100% - 15px), transparent);
+}
+
+@media (min-width: 640px) {
+  .marquee-container {
+    max-width: 400px;
+    -webkit-mask-image: linear-gradient(to right, transparent, black 30px, black calc(100% - 30px), transparent);
+    mask-image: linear-gradient(to right, transparent, black 30px, black calc(100% - 30px), transparent);
+  }
 }
 
 .marquee-content {
