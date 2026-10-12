@@ -10,6 +10,7 @@ const videoChannel = ref("");
 const viewers = ref(0);
 const isTVMode = ref(true); // TV mode = synchronized playback
 const startPosition = ref(0); // Position to start video from
+const showIOSPlayButton = ref(false); // Show tap-to-play overlay on iOS
 
 const allTags = computed(() => {
   const tagSet = new Set<string>();
@@ -103,24 +104,11 @@ const setupPlayer = () => {
       onReady: (event: any) => {
         isPlayerReady = true;
 
-        // For iOS, we need to be more aggressive with playback initiation
+        // For iOS, show play button overlay instead of trying to autoplay
         if (isIOS()) {
-          try {
-            // iOS requires explicit play call
-            event.target.playVideo();
-            // Try to unmute immediately on iOS since user just clicked
-            setTimeout(() => {
-              try {
-                event.target.unMute();
-              } catch (e) {
-                console.log('Could not unmute on iOS:', e);
-              }
-            }, 100);
-          } catch (e) {
-            console.log('Could not start playback on iOS:', e);
-          }
+          showIOSPlayButton.value = true;
         } else {
-          // Desktop Safari
+          // Desktop Safari - try to autoplay
           try {
             event.target.playVideo();
             setTimeout(() => {
@@ -363,6 +351,23 @@ const seekBy = (deltaSeconds: number) => {
   player.seekTo(nextTime, true);
 };
 
+const handleIOSPlay = () => {
+  if (!isPlayerReady || !player) return;
+  try {
+    player.playVideo();
+    setTimeout(() => {
+      try {
+        player.unMute();
+      } catch (e) {
+        console.log('Could not unmute:', e);
+      }
+    }, 100);
+    showIOSPlayButton.value = false;
+  } catch (e) {
+    console.log('Could not start playback:', e);
+  }
+};
+
 watch(filteredVideos, (nextVideos) => {
   if (nextVideos.length === 0) {
     currentVideoIndex.value = 0;
@@ -376,6 +381,11 @@ watch(filteredVideos, (nextVideos) => {
 watch(currentVideoId, () => {
   // Reset iframe loaded state when video changes (iframe recreates due to :key)
   isIframeLoaded = false;
+
+  // Show play button again on iOS when video changes
+  if (isIOS()) {
+    showIOSPlayButton.value = true;
+  }
 
   // In TV mode, fetch the current server state for the new video
   if (isTVMode.value && currentVideoId.value) {
@@ -511,6 +521,23 @@ onUnmounted(() => {
             playsinline
             @load="setupVideoEndListener"
           ></iframe>
+          <!-- iOS Play Button Overlay -->
+          <transition name="fade">
+            <div
+              v-if="showIOSPlayButton"
+              class="absolute inset-0 flex items-center justify-center bg-black/50 z-20 pointer-events-auto"
+              @click="handleIOSPlay"
+            >
+              <button
+                class="flex items-center justify-center w-20 h-20 rounded-full bg-white/90 hover:bg-white transition-all shadow-2xl"
+                type="button"
+              >
+                <svg class="w-10 h-10 text-black ml-1" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </button>
+            </div>
+          </transition>
         </div>
       </transition>
     </template>
