@@ -54,9 +54,19 @@ export class PlaybackState implements DurableObject {
   private async getState(corsHeaders: Record<string, string>, videoId: string | null): Promise<Response> {
     // Load state from storage if not in memory
     if (!this.playbackData) {
-      const stored = await this.state.storage.get<PlaybackStateData>('playback');
+      const stored = await this.state.storage.get<any>('playback');
       if (stored) {
-        this.playbackData = stored;
+        // Migration: convert old format to new format
+        if ('currentVideoIndex' in stored && !('videoStates' in stored)) {
+          // Old format detected - migrate to new format
+          this.playbackData = {
+            videoStates: {},
+            viewers: stored.viewers || 0,
+          };
+          await this.state.storage.put('playback', this.playbackData);
+        } else {
+          this.playbackData = stored as PlaybackStateData;
+        }
       } else {
         // Initialize empty state
         this.playbackData = {
@@ -119,9 +129,17 @@ export class PlaybackState implements DurableObject {
 
   private async heartbeat(corsHeaders: Record<string, string>): Promise<Response> {
     if (!this.playbackData) {
-      const stored = await this.state.storage.get<PlaybackStateData>('playback');
+      const stored = await this.state.storage.get<any>('playback');
       if (stored) {
-        this.playbackData = stored;
+        // Migration: convert old format to new format
+        if ('currentVideoIndex' in stored && !('videoStates' in stored)) {
+          this.playbackData = {
+            videoStates: {},
+            viewers: stored.viewers || 0,
+          };
+        } else {
+          this.playbackData = stored as PlaybackStateData;
+        }
       } else {
         this.playbackData = {
           videoStates: {},

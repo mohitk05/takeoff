@@ -35,7 +35,7 @@ export default {
 
       // GET /api/playback - Get current playback state
       if (url.pathname === '/api/playback') {
-        const id = env.PLAYBACK_STATE.idFromName('global');
+        const id = env.PLAYBACK_STATE.idFromName('global-v2'); // New DO instance
         const stub = env.PLAYBACK_STATE.get(id);
         const stateUrl = new URL('/state', request.url);
         // Pass through videoId query parameter if present
@@ -48,7 +48,7 @@ export default {
 
       // POST /api/heartbeat - Send viewer heartbeat
       if (url.pathname === '/api/heartbeat' && request.method === 'POST') {
-        const id = env.PLAYBACK_STATE.idFromName('global');
+        const id = env.PLAYBACK_STATE.idFromName('global-v2'); // New DO instance
         const stub = env.PLAYBACK_STATE.get(id);
         return stub.fetch(new Request(new URL('/heartbeat', request.url), {
           method: 'POST',
