@@ -18,4 +18,4 @@ script_name = "takeoff-api"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["PlaybackState"]
+new_sqlite_classes = ["PlaybackState"]
