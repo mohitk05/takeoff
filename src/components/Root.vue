@@ -4,6 +4,8 @@ import videos from "../assets/videos.json";
 
 const currentVideoIndex = ref(0);
 const selectedTags = ref<string[]>([]);
+const videoTitle = ref("");
+const videoChannel = ref("");
 
 const allTags = (() => {
   const tagSet = new Set<string>();
@@ -40,6 +42,7 @@ let player: any = null;
 let isYouTubeApiLoading = false;
 let isYouTubeApiLoaded = false;
 let isPlayerReady = false;
+let isIframeLoaded = false;
 
 const loadYouTubeApi = () => {
   if (isYouTubeApiLoaded || isYouTubeApiLoading) return;
@@ -52,13 +55,18 @@ const loadYouTubeApi = () => {
 
   (window as any).onYouTubeIframeAPIReady = () => {
     isYouTubeApiLoaded = true;
-    setupPlayer();
+    // Try to setup player if iframe is already loaded
+    if (isIframeLoaded) {
+      setupPlayer();
+    }
   };
 };
 
 const setupPlayer = () => {
   const iframe = document.querySelector("iframe");
-  if (!iframe) return;
+  if (!iframe) {
+    return;
+  }
 
   if (player?.destroy) {
     player.destroy();
@@ -67,8 +75,26 @@ const setupPlayer = () => {
 
   player = new (window as any).YT.Player(iframe, {
     events: {
-      onReady: () => {
+      onReady: (event: any) => {
         isPlayerReady = true;
+        // Disable captions
+        try {
+          const options = event.target.getOptions();
+          if (options.includes('cc')) {
+            event.target.unloadModule('cc');
+          }
+          event.target.setOption('captions', 'track', {});
+        } catch (e) {
+          console.log('Could not disable captions:', e);
+        }
+        // Fetch video details
+        try {
+          const videoData = event.target.getVideoData();
+          videoTitle.value = videoData.title || "";
+          videoChannel.value = videoData.author || "";
+        } catch (e) {
+          console.log('Could not fetch video details:', e);
+        }
       },
       onStateChange: (event: any) => {
         // YT.PlayerState.ENDED = 0
@@ -81,6 +107,8 @@ const setupPlayer = () => {
 };
 
 const setupVideoEndListener = () => {
+  isIframeLoaded = true;
+  // Only setup player if YouTube API is ready
   if ((window as any).YT && (window as any).YT.Player) {
     setupPlayer();
   }
@@ -145,6 +173,11 @@ watch(filteredVideos, (nextVideos) => {
   }
 });
 
+watch(currentVideoId, () => {
+  // Reset iframe loaded state when video changes (iframe recreates due to :key)
+  isIframeLoaded = false;
+});
+
 onUnmounted(() => {
   window.removeEventListener("keydown", handleKeyPress);
 });
@@ -156,10 +189,27 @@ onUnmounted(() => {
       <div
         class="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 rounded-full border border-white/15 bg-black/60 px-4 py-2 text-white backdrop-blur"
       >
-        <div class="text-xs uppercase tracking-[0.2em] text-white font-bold">
-          Takeoff
+        <div class="flex items-center gap-3 min-w-0 flex-1">
+          <div class="text-xs uppercase tracking-[0.2em] text-white font-bold whitespace-nowrap">
+            Takeoff
+          </div>
+          <transition name="fade">
+            <div v-if="isVideoVisible && (videoTitle || videoChannel)" class="flex items-center gap-2 min-w-0 flex-1">
+              <div class="w-px h-4 bg-white/20"></div>
+              <div class="marquee-container">
+                <div class="marquee-content">
+                  <span class="text-xs text-white/90 font-medium whitespace-nowrap">
+                    {{ videoTitle }}
+                  </span>
+                  <span v-if="videoChannel" class="text-xs text-white/60 whitespace-nowrap ml-2">
+                    • {{ videoChannel }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </transition>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 flex-shrink-0">
           <a
             v-if="currentVideoId"
             class="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white/90 hover:border-white/40 hover:text-white"
@@ -217,7 +267,7 @@ onUnmounted(() => {
               min-height: 120vh;
               min-width: 213.33vh;
             "
-            :src="`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&controls=0&showinfo=0&modestbranding=1&rel=0&disablekb=1&fs=0&iv_load_policy=3&enablejsapi=1`"
+            :src="`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&controls=0&showinfo=0&modestbranding=1&rel=0&disablekb=1&fs=0&iv_load_policy=3&enablejsapi=1&cc_load_policy=0`"
             title="YouTube video player"
             frameborder="0"
             allow="
@@ -280,5 +330,44 @@ onUnmounted(() => {
 .fade-slow-enter-from,
 .fade-slow-leave-to {
   opacity: 0;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.marquee-container {
+  overflow: hidden;
+  position: relative;
+  min-width: 0;
+  flex: 1;
+  max-width: 400px;
+  -webkit-mask-image: linear-gradient(to right, transparent, black 30px, black calc(100% - 30px), transparent);
+  mask-image: linear-gradient(to right, transparent, black 30px, black calc(100% - 30px), transparent);
+}
+
+.marquee-content {
+  display: inline-block;
+  padding-left: 100%;
+  animation: marquee 20s linear infinite;
+}
+
+.marquee-content:hover {
+  animation-play-state: paused;
+}
+
+@keyframes marquee {
+  0% {
+    transform: translate(0, 0);
+  }
+  100% {
+    transform: translate(-100%, 0);
+  }
 }
 </style>
