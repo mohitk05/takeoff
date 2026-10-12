@@ -1,0 +1,21 @@
+name = "takeoff-api"
+main = "src/index.ts"
+compatibility_date = "2024-10-01"
+
+# Uncomment for production deployment
+# routes = [
+#   { pattern = "takeoff.example.com/api/*", zone_name = "example.com" }
+# ]
+
+[vars]
+ENVIRONMENT = "development"
+
+# Durable Object for managing synchronized playback state
+[[durable_objects.bindings]]
+name = "PLAYBACK_STATE"
+class_name = "PlaybackState"
+script_name = "takeoff-api"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["PlaybackState"]

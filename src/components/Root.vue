@@ -1,23 +1,27 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
-import videos from "../assets/videos.json";
+import { getVideos, getPlaybackState, sendHeartbeat, type Video } from "../api/client";
 
+const videos = ref<Video[]>([]);
 const currentVideoIndex = ref(0);
 const selectedTags = ref<string[]>([]);
 const videoTitle = ref("");
 const videoChannel = ref("");
+const viewers = ref(0);
+const isTVMode = ref(true); // TV mode = synchronized playback
+const startPosition = ref(0); // Position to start video from
 
-const allTags = (() => {
+const allTags = computed(() => {
   const tagSet = new Set<string>();
-  videos.forEach((video) => {
+  videos.value.forEach((video) => {
     video.tags.forEach((tag) => tagSet.add(tag));
   });
   return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
-})();
+});
 
 const filteredVideos = computed(() => {
-  if (selectedTags.value.length === 0) return videos;
-  return videos.filter((video) =>
+  if (selectedTags.value.length === 0) return videos.value;
+  return videos.value.filter((video) =>
     video.tags.some((tag) => selectedTags.value.includes(tag)),
   );
 });
@@ -77,6 +81,12 @@ const setupPlayer = () => {
     events: {
       onReady: (event: any) => {
         isPlayerReady = true;
+
+        // If in TV mode and we have a start position, seek to it
+        if (isTVMode.value && startPosition.value > 0) {
+          event.target.seekTo(startPosition.value, true);
+        }
+
         // Disable captions
         try {
           const options = event.target.getOptions();
@@ -122,10 +132,56 @@ const selectRandomIndex = () => {
   currentVideoIndex.value = Math.floor(Math.random() * videoIds.value.length);
 };
 
-const handleStartVideo = () => {
-  selectRandomIndex();
+const handleStartVideo = async () => {
+  if (isTVMode.value) {
+    // TV mode: fetch synchronized playback state
+    try {
+      const state = await getPlaybackState();
+      const videoIndex = videos.value.findIndex(v => v.id === state.videoId);
+      if (videoIndex !== -1) {
+        currentVideoIndex.value = videoIndex;
+        startPosition.value = state.position;
+        viewers.value = state.viewers;
+      } else {
+        // Fallback to random if video not found
+        selectRandomIndex();
+      }
+    } catch (error) {
+      console.error('Failed to fetch playback state:', error);
+      // Fallback to random selection
+      selectRandomIndex();
+    }
+  } else {
+    // Random mode: just pick a random video
+    selectRandomIndex();
+  }
+
   isVideoVisible.value = true;
   loadYouTubeApi();
+
+  // Send heartbeat every 20 seconds in TV mode
+  if (isTVMode.value) {
+    startHeartbeat();
+  }
+};
+
+let heartbeatInterval: number | null = null;
+
+const startHeartbeat = () => {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+  }
+
+  heartbeatInterval = window.setInterval(async () => {
+    try {
+      await sendHeartbeat();
+      // Optionally refresh viewer count
+      const state = await getPlaybackState();
+      viewers.value = state.viewers;
+    } catch (error) {
+      console.error('Heartbeat failed:', error);
+    }
+  }, 20000);
 };
 
 const handleKeyPress = (event: KeyboardEvent) => {
@@ -146,9 +202,16 @@ const handleKeyPress = (event: KeyboardEvent) => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener("keydown", handleKeyPress);
-  selectRandomIndex();
+
+  // Load videos from API
+  try {
+    videos.value = await getVideos();
+    selectRandomIndex();
+  } catch (error) {
+    console.error('Failed to load videos:', error);
+  }
 });
 
 const seekBy = (deltaSeconds: number) => {
@@ -180,6 +243,9 @@ watch(currentVideoId, () => {
 
 onUnmounted(() => {
   window.removeEventListener("keydown", handleKeyPress);
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+  }
 });
 </script>
 
@@ -210,6 +276,11 @@ onUnmounted(() => {
           </transition>
         </div>
         <div class="flex items-center gap-3 flex-shrink-0">
+          <div v-if="isTVMode && viewers > 0" class="flex items-center gap-2 rounded-full border border-white/20 px-4 py-2">
+            <span class="text-xs font-semibold uppercase tracking-widest text-white/70">
+              👥 {{ viewers }} watching
+            </span>
+          </div>
           <a
             v-if="currentVideoId"
             class="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white/90 hover:border-white/40 hover:text-white"
