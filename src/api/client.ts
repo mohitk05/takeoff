@@ -35,8 +35,12 @@ export async function getPlaybackState(videoId?: string): Promise<PlaybackState>
   return response.json();
 }
 
-export async function sendHeartbeat(): Promise<void> {
+export async function sendHeartbeat(videoId: string): Promise<void> {
   await fetch(`${API_BASE_URL}/api/heartbeat`, {
     method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ videoId }),
   });
 }

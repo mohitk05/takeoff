@@ -6,6 +6,7 @@ import {
   sendHeartbeat,
   type Video,
 } from "../api/client";
+import TVStatic from "./TVStatic.vue";
 
 const videos = ref<Video[]>([]);
 const currentVideoIndex = ref(0);
@@ -17,9 +18,49 @@ const isTVMode = ref(true); // TV mode = synchronized playback
 const startPosition = ref(0); // Position to start video from
 const showIOSPlayButton = ref(false); // Show tap-to-play overlay on iOS
 const showHint = ref(true); // Show keyboard/gesture hint
+const showStatic = ref(false); // Show TV static during transitions
+const isMuted = ref(false); // Toggle sound on desktop
+
+let staticAudio: HTMLAudioElement | null = null;
+
+const playStatic = () => {
+  showStatic.value = true;
+
+  // Play static sound
+  if (!staticAudio) {
+    staticAudio = new Audio('/static.mp3');
+    staticAudio.volume = 0.15; // Keep it subtle
+  }
+
+  try {
+    staticAudio.currentTime = 0;
+    staticAudio.play().catch(e => console.log('Could not play static:', e));
+  } catch (e) {
+    console.log('Could not play static:', e);
+  }
+
+  // Hide static after 800ms
+  setTimeout(() => {
+    showStatic.value = false;
+    if (staticAudio) {
+      staticAudio.pause();
+    }
+  }, 800);
+};
 
 const hideHint = () => {
   showHint.value = false;
+};
+
+const toggleMute = () => {
+  isMuted.value = !isMuted.value;
+  if (isPlayerReady && player) {
+    if (isMuted.value) {
+      player.mute();
+    } else {
+      player.unMute();
+    }
+  }
 };
 
 const allTags = computed(() => {
@@ -303,9 +344,9 @@ const startHeartbeat = () => {
 
   heartbeatInterval = window.setInterval(async () => {
     try {
-      await sendHeartbeat();
+      await sendHeartbeat(currentVideoId.value);
       // Optionally refresh viewer count
-      const state = await getPlaybackState();
+      const state = await getPlaybackState(currentVideoId.value);
       viewers.value = state.viewers;
     } catch (error) {
       console.error("Heartbeat failed:", error);
@@ -423,6 +464,9 @@ watch(currentVideoId, () => {
   // Reset iframe loaded state when video changes (iframe recreates due to :key)
   isIframeLoaded = false;
 
+  // Play TV static effect when switching videos
+  playStatic();
+
   // Show play button again on iOS when video changes
   if (isIOS()) {
     showIOSPlayButton.value = true;
@@ -456,7 +500,7 @@ onUnmounted(() => {
   <section
     class="relative h-screen w-screen overflow-hidden bg-black touch-none select-none"
   >
-    <div class="absolute left-0 top-0 z-10 w-full p-2 sm:p-4">
+    <div class="absolute left-0 top-0 z-50 w-full p-2 sm:p-4">
       <div
         class="mx-auto flex w-full max-w-3xl flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 rounded-2xl sm:rounded-full border border-white/15 bg-black/60 p-3 sm:px-4 sm:py-2 text-white backdrop-blur"
       >
@@ -496,14 +540,55 @@ onUnmounted(() => {
         <div
           class="flex items-center gap-2 sm:gap-3 flex-shrink-0 justify-between sm:justify-end"
         >
+          <!-- Mute toggle button - desktop only -->
+          <button
+            v-if="isVideoVisible"
+            type="button"
+            class="hidden sm:flex items-center justify-center rounded-full border border-white/20 px-3 py-2 text-white/90 hover:border-white/40 hover:text-white transition-colors"
+            @click="toggleMute"
+            :title="isMuted ? 'Unmute' : 'Mute'"
+          >
+            <svg
+              v-if="!isMuted"
+              class="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+              />
+            </svg>
+            <svg
+              v-else
+              class="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+              />
+            </svg>
+          </button>
           <div
             v-if="isTVMode && viewers > 0"
             class="flex items-center gap-1 sm:gap-2 rounded-full border border-white/20 px-2 sm:px-4 py-1.5 sm:py-2"
           >
+            <span class="relative flex h-1.5 w-1.5">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span>
+            </span>
             <span
               class="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-white/70"
             >
-              👥 {{ viewers }}
+              {{ viewers }}
             </span>
           </div>
           <a
@@ -610,6 +695,9 @@ onUnmounted(() => {
           </transition>
         </div>
       </transition>
+
+      <!-- TV Static Overlay -->
+      <TVStatic v-if="showStatic" />
 
       <!-- Keyboard/Gesture Hint -->
       <transition name="fade">

@@ -5,9 +5,9 @@ interface PlaybackStateData {
   videoStates: {
     [videoId: string]: {
       startTime: number; // When this video's playback started (timestamp)
+      viewers: number; // Current viewers for this video
     };
   };
-  viewers: number;
 }
 
 export class PlaybackState implements DurableObject {
@@ -39,7 +39,7 @@ export class PlaybackState implements DurableObject {
       }
 
       if (url.pathname === '/heartbeat' && request.method === 'POST') {
-        return this.heartbeat(corsHeaders);
+        return this.heartbeat(corsHeaders, request);
       }
 
       return new Response('Not found', { status: 404, headers: corsHeaders });
@@ -57,11 +57,21 @@ export class PlaybackState implements DurableObject {
       const stored = await this.state.storage.get<any>('playback');
       if (stored) {
         // Migration: convert old format to new format
-        if ('currentVideoIndex' in stored && !('videoStates' in stored)) {
+        if ('currentVideoIndex' in stored || 'viewers' in stored) {
           // Old format detected - migrate to new format
+          const migratedStates: any = {};
+          if (stored.videoStates) {
+            // Migrate existing video states and add viewers field
+            for (const [vid, state] of Object.entries(stored.videoStates)) {
+              const oldState = state as any;
+              migratedStates[vid] = {
+                startTime: oldState.startTime,
+                viewers: 0,
+              };
+            }
+          }
           this.playbackData = {
-            videoStates: {},
-            viewers: stored.viewers || 0,
+            videoStates: migratedStates,
           };
           await this.state.storage.put('playback', this.playbackData);
         } else {
@@ -71,7 +81,6 @@ export class PlaybackState implements DurableObject {
         // Initialize empty state
         this.playbackData = {
           videoStates: {},
-          viewers: 0,
         };
         await this.state.storage.put('playback', this.playbackData);
       }
@@ -97,7 +106,14 @@ export class PlaybackState implements DurableObject {
     if (!this.playbackData.videoStates[videoId]) {
       this.playbackData.videoStates[videoId] = {
         startTime: now,
+        viewers: 0,
       };
+      await this.state.storage.put('playback', this.playbackData);
+    }
+
+    // Ensure viewers field exists (migration)
+    if (this.playbackData.videoStates[videoId].viewers === undefined) {
+      this.playbackData.videoStates[videoId].viewers = 0;
       await this.state.storage.put('playback', this.playbackData);
     }
 
@@ -115,7 +131,7 @@ export class PlaybackState implements DurableObject {
         position,
         duration: video.duration,
         tags: video.tags,
-        viewers: this.playbackData.viewers,
+        viewers: this.playbackData.videoStates[videoId].viewers,
         serverTime: now,
       }),
       {
@@ -127,15 +143,14 @@ export class PlaybackState implements DurableObject {
     );
   }
 
-  private async heartbeat(corsHeaders: Record<string, string>): Promise<Response> {
+  private async heartbeat(corsHeaders: Record<string, string>, request: Request): Promise<Response> {
     if (!this.playbackData) {
       const stored = await this.state.storage.get<any>('playback');
       if (stored) {
         // Migration: convert old format to new format
-        if ('currentVideoIndex' in stored && !('videoStates' in stored)) {
+        if ('currentVideoIndex' in stored || 'viewers' in stored) {
           this.playbackData = {
-            videoStates: {},
-            viewers: stored.viewers || 0,
+            videoStates: stored.videoStates || {},
           };
         } else {
           this.playbackData = stored as PlaybackStateData;
@@ -143,19 +158,40 @@ export class PlaybackState implements DurableObject {
       } else {
         this.playbackData = {
           videoStates: {},
-          viewers: 0,
         };
       }
     }
 
-    // Increment viewer count (simplified, in production use WebSocket connections)
-    this.playbackData.viewers += 1;
+    // Get videoId from request body
+    let videoId: string | null = null;
+    try {
+      const body = await request.json() as { videoId?: string };
+      videoId = body.videoId || null;
+    } catch {
+      // No body or invalid JSON - ignore
+    }
+
+    // If no videoId, default to first video
+    if (!videoId) {
+      videoId = videos[0].id;
+    }
+
+    // Initialize video state if needed
+    if (!this.playbackData.videoStates[videoId]) {
+      this.playbackData.videoStates[videoId] = {
+        startTime: Date.now(),
+        viewers: 0,
+      };
+    }
+
+    // Increment viewer count for this specific video
+    this.playbackData.videoStates[videoId].viewers += 1;
     await this.state.storage.put('playback', this.playbackData);
 
     // Decay viewer count after 30 seconds
     setTimeout(async () => {
-      if (this.playbackData) {
-        this.playbackData.viewers = Math.max(0, this.playbackData.viewers - 1);
+      if (this.playbackData && this.playbackData.videoStates[videoId]) {
+        this.playbackData.videoStates[videoId].viewers = Math.max(0, this.playbackData.videoStates[videoId].viewers - 1);
         await this.state.storage.put('playback', this.playbackData);
       }
     }, 30000);
