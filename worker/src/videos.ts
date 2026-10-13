@@ -6,9 +6,39 @@ export interface Video {
 
 export const videos: Video[] = [
   {
+    "id": "TTZozTaWiRo",
+    "tags": ["pilot-pov", "takeoff", "cockpit-view"],
+    "duration": 789
+  },
+  {
+    "id": "5v1-BRv-e_s",
+    "tags": ["pilot-pov", "takeoff", "cockpit-view", "4k"],
+    "duration": 991
+  },
+  {
     "id": "a9o-PE-DLNA",
-    "tags": ["pilot-pov", "takeoff", "landing", "cockpit-view"],
+    "tags": ["pilot-pov", "takeoff", "cockpit-view", "4k"],
     "duration": 1082
+  },
+  {
+    "id": "MkkfC6B-pn0",
+    "tags": ["pilot-pov", "takeoff", "landing", "cockpit-view"],
+    "duration": 1949
+  },
+  {
+    "id": "EAyjhRtkc3A",
+    "tags": ["pilot-pov", "takeoff", "landing", "cockpit-view"],
+    "duration": 915
+  },
+  {
+    "id": "cunJginLVNk",
+    "tags": ["pilot-pov", "takeoff", "landing", "cockpit-view"],
+    "duration": 3246
+  },
+  {
+    "id": "fBMAcBOw_N4",
+    "tags": ["pilot-pov", "takeoff", "landing", "cockpit-view", "bad-weather"],
+    "duration": 773
   },
   {
     "id": "16XTAK-4Xbk",
