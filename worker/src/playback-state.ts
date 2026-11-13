@@ -1,4 +1,4 @@
-import { videos } from './videos';
+import type { Video } from './videos';
 
 interface PlaybackStateData {
   // Each video has its own virtual playback starting from when it was first accessed
@@ -14,8 +14,17 @@ export class PlaybackState implements DurableObject {
   private state: DurableObjectState;
   private playbackData: PlaybackStateData | null = null;
 
-  constructor(state: DurableObjectState) {
+  private env: { VIDEO_LIBRARY: DurableObjectNamespace };
+
+  constructor(state: DurableObjectState, env: { VIDEO_LIBRARY: DurableObjectNamespace }) {
     this.state = state;
+    this.env = env;
+  }
+
+  private async getVideos(): Promise<Video[]> {
+    const library = this.env.VIDEO_LIBRARY.get(this.env.VIDEO_LIBRARY.idFromName('library'));
+    const res = await library.fetch('https://library/videos');
+    return (await res.json()) as Video[];
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -85,6 +94,8 @@ export class PlaybackState implements DurableObject {
         await this.state.storage.put('playback', this.playbackData);
       }
     }
+
+    const videos = await this.getVideos();
 
     // If no videoId specified, return first video
     if (!videoId) {
@@ -173,7 +184,7 @@ export class PlaybackState implements DurableObject {
 
     // If no videoId, default to first video
     if (!videoId) {
-      videoId = videos[0].id;
+      videoId = (await this.getVideos())[0].id;
     }
 
     // Initialize video state if needed

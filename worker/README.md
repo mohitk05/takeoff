@@ -8,7 +8,7 @@ This worker provides a synchronized playback experience where all viewers watch 
 
 ### Components
 
-1. **Video Data** (`videos.ts`): Static list of all available videos with metadata
+1. **Video Library** (`video-library.ts`): Durable Object storing the video list (seeded once from `videos.ts`)
 2. **Durable Object** (`playback-state.ts`): Manages the global playback state
 3. **Worker** (`index.ts`): HTTP API endpoints
 
@@ -43,6 +43,17 @@ Returns the complete list of videos.
   ...
 ]
 ```
+
+### POST `/api/videos`
+Adds a video to the library. Requires `Authorization: Bearer <ADMIN_TOKEN>`.
+
+```bash
+curl -X POST https://takeoff-api.karekar-mohit.workers.dev/api/videos \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"id":"dQw4w9WgXcQ","tags":["pilot-pov","landing"],"duration":300}'
+```
+
+`201` on success; `400` invalid input; `401` bad token; `409` duplicate id; `503` if `ADMIN_TOKEN` isn't set (`wrangler secret put ADMIN_TOKEN`).
 
 ### GET `/api/playback`
 Returns the current playback state.

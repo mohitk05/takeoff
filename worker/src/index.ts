@@ -1,10 +1,12 @@
-import { videos } from './videos';
 import { PlaybackState } from './playback-state';
+import { VideoLibrary } from './video-library';
 
-export { PlaybackState };
+export { PlaybackState, VideoLibrary };
 
 interface Env {
   PLAYBACK_STATE: DurableObjectNamespace;
+  VIDEO_LIBRARY: DurableObjectNamespace;
+  ADMIN_TOKEN?: string; // secret: bearer token required for POST /api/videos
 }
 
 export default {
@@ -15,7 +17,7 @@ export default {
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
 
     if (request.method === 'OPTIONS') {
@@ -23,14 +25,33 @@ export default {
     }
 
     try {
-      // GET /api/videos - Get all videos
+      // GET /api/videos - list, POST /api/videos - add a video (admin only)
       if (url.pathname === '/api/videos') {
-        return new Response(JSON.stringify(videos), {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'application/json',
-          },
-        });
+        const library = env.VIDEO_LIBRARY.get(env.VIDEO_LIBRARY.idFromName('library'));
+
+        if (request.method === 'POST') {
+          if (!env.ADMIN_TOKEN) {
+            return new Response(JSON.stringify({ error: 'Adding videos is not configured' }), {
+              status: 503,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          if (request.headers.get('Authorization') !== `Bearer ${env.ADMIN_TOKEN}`) {
+            return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+              status: 401,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+
+        const res = await library.fetch(
+          new Request(new URL('/videos', request.url), {
+            method: request.method,
+            body: request.method === 'POST' ? request.body : undefined,
+            headers: request.headers,
+          })
+        );
+        return res;
       }
 
       // GET /api/playback - Get current playback state

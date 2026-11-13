@@ -16,6 +16,16 @@ name = "PLAYBACK_STATE"
 class_name = "PlaybackState"
 script_name = "takeoff-api"
 
+# Durable Object holding the video list (seeded from src/videos.ts)
+[[durable_objects.bindings]]
+name = "VIDEO_LIBRARY"
+class_name = "VideoLibrary"
+script_name = "takeoff-api"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["PlaybackState"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["VideoLibrary"]

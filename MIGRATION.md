@@ -6,7 +6,7 @@ Converted Takeoff from client-side random video playback to a TV-style synchroni
 ## Architecture Changes
 
 ### Before
-- Videos stored in `/src/assets/videos.json`
+- Videos stored in the `VideoLibrary` Durable Object (seeded from `worker/src/videos.ts`)
 - Client-side random selection
 - Each user watches different videos
 - No viewer interaction
